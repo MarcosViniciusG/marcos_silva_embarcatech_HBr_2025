@@ -1,4 +1,4 @@
-# Digital Galton Board
+# Sound Synthesizer
 
 ## Project objective
 

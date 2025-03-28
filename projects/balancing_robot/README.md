@@ -1,4 +1,4 @@
-# Digital Galton Board
+# Balancing Robot
 
 ## Project objective
 
