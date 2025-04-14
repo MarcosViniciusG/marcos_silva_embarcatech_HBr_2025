@@ -1,23 +1,22 @@
-# Projetos de Sistemas Embarcados - EmbarcaTech 2025
+# Projects in embedded systems - EmbarcaTech
 
-Autor: **(insira seu nome)**
+Author: Marcos Vinícius Gündel da Silva
 
-Curso: Residência Tecnológica em Sistemas Embarcados
+Course: Technological Residency in Embedded Systems
 
-Instituição: EmbarcaTech - HBr
+Institution: EmbarcaTech - HBr 
 
-Campinas, março de 2025
+Brasília Class
 
----
+## About this repository
+A repository to store all projects developed during the course in embedded systems, during the second stage.
 
-## Sobre este repositório
+## Project list
+| Project | Description |
+|---------|-----------|
+| [Digital Galton Board](./projects/galton_board/) | Simulation of random events with visualization on OLED display and histogram |
+| [Sound Synthesizer](./projects/sound_synthesizer/) | Sound generation with buttons and buzzers |
+| [Balancing Robot](./projects/balancing_robot/) | Two-wheel balancing cart with PID control |
 
-Este repositório reúne os projetos desenvolvidos ao longo do curso de Sistemas Embarcados, durante a etapa de residência.  
-
-Cada projeto tem sua própria pasta, contendo o código-fonte, documentação e recursos visuais.
-
----
-
-## O que fazer com este arquivo
-
-Ao fazer o *fork* do repositório, o aluno está livre para modificar este arquivo como quiser dentro do seu próprio *fork*.
+## License
+MIT License
