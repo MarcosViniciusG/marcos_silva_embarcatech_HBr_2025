@@ -20,6 +20,7 @@ volatile bool update = false;
 volatile bool countdownStarted = false;
 volatile uint8_t counter=0;
 volatile uint8_t clickCounter=0;
+volatile absolute_time_t lastClickTime=0;
 
 render_area frame_area = {
     start_column : 0,
@@ -67,9 +68,10 @@ void initButtons()
 void irqCallback(uint gpio, uint32_t events) {
     if(gpio==BTN_A && !countdownStarted)
         start = true;
-    else if(gpio==BTN_B && countdownStarted) {
+    else if(gpio==BTN_B && countdownStarted && absolute_time_diff_us(lastClickTime, get_absolute_time()) > 200000) {
         clickCounter++;
         update = true;
+        lastClickTime = get_absolute_time();
     }
 }
 
