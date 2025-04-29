@@ -1,5 +1,11 @@
 #include "led_embutido.h"
 
-void hal_led_toggle(bool st) {
-    cyw43_arch_gpio_put(uint wl_gpio, bool st);
+bool led_initiated = false;
+
+void hal_led_toggle(void) {
+    if(!led_initiated) {
+        led_initiated = led_embutido_init();
+    }
+
+    led_embutido_set(!led_embutido_get());
 }

@@ -1,4 +1,11 @@
-#include "led_embutido.c"
+#ifndef LED_EMBUTIDO_H
 
-extern void cyw43_arch_gpio_put(uint wl_gpio, bool value);
-extern int cyw43_arch_init(void);
+#define LED_EMBUTIDO_H
+
+#include <stdbool.h>
+
+bool led_embutido_init(void);
+void led_embutido_set(bool ligar);
+bool led_embutido_get(void);
+
+#endif
