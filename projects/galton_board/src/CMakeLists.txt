@@ -37,7 +37,9 @@ pico_sdk_init()
 
 add_executable(src
     apps/main.c 
-    include/ssd1306.c   
+    include/ssd1306.c  
+    include/aux.c 
+    drivers/ssd1306_i2c.c
 )
 
 pico_set_program_name(src "src")

@@ -1,43 +1,43 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/i2c.h"
-#include "ssd1306.h"
+#include "aux.h"
 #include "math.h"
 #include "stdlib.h"     
 #include "time.h"
+#include "ssd1306_i2c.h"
 
-#define I2C_PORT i2c1
-#define I2C_SDA 14
-#define I2C_SCL 15
-
+// --- Macros ---
 #define MAX_BALLS 10
-#define N 5
-#define MAX_PEGS 15 // ((1+N) * N) / 2
-#define H 64
-#define W 128
+#define N 5                      // Number of rows
+#define MAX_PEGS 15              // ((1+N) * N) / 2
+#define H 64                     // Height of the display
+#define W 128                    // Width of the display
 
-const double PI = 3.1415926535;
-const double GRAVITY = 1.2;
-const int HORIZONTAL_SPACE = 20;
-const int VERTICAL_SPACE = 7;
-const int START_COLUMN=W/2 - 1;
-const int START_ROW=10;
-const double DT = 0.35;
-const int BALL_RADIUS=1;
-const int PEG_RADIUS=2;
-const int STOP_BALLS = 10000;
-static int BALLS=0;
-
-typedef struct Ball {
+// --- Structs ---
+typedef struct Ball {         
+    /*
+        Ball struct with
+        coordinates, radius and velocity
+    */
     int x, y, radius;
     double vx, vy;
 } Ball;
 
-typedef struct Peg {
+typedef struct Peg {            
+    /*
+        Peg struct with
+        coordinates and radius
+    */
     int x, y, radius;
 } Peg;
 
 typedef struct Experiment {
+    /*
+        Experiment struct responsible
+        for keeping track of every ball, peg
+        and the final result
+    */
+
     int n_pegs;
     int n_balls;
 
@@ -47,20 +47,37 @@ typedef struct Experiment {
     int result[N+1];
 } Experiment;
 
-// Global experiment variable
-static Experiment experiment;
+// --- Global constants ---
+const double GRAVITY = 1.2;      // Gravity in pixels / second^2
+const int HORIZONTAL_SPACE = 20; // Horizontal spacing between every peg
+const int VERTICAL_SPACE = 7;    // Vertical spacing between every peg
+const int START_COLUMN=W/2 - 1;  // Horizontal starting position of the ball/peg
+const int START_ROW=10;          // Vertical starting position of the ball/peg
+const double DT = 0.35;          // Time passed since last clock
+const int BALL_RADIUS=1;         // Radius of the ball
+const int PEG_RADIUS=2;          // Radius of the pegs
+const int STOP_BALLS = 10000;    // Experiment will stop
 
-int rand_mod(int mod) {
-    int r = rand() % mod;
+// --- Global variables ---
+static int BALLS=0;              // Number of balls that reached the end
+static Experiment experiment;    // Global experiment variable (Singleton)
 
-    return r;
-}
+// --- Prototypes ---
+void setup_ball(int x, int y, int radius);
+void setup_peg(int x, int y, int radius);
+void setup_experiment();
+void collision_handler();
+void update_balls();
+void draw_circle(ssd1306_t *disp, int cy, int cx, int radius);
+void update_display(ssd1306_t *disp);
 
-int intceil(int a, int b) {
-    return (a / b) + (a % b != 0);
-}
+void setup_ball(int x, int y, int radius) {
+    /*
+        Initializes ball with center in x and y
+        and r = radius
+        Random x velocity
+    */
 
-void setup_ball( int x, int y, int radius) {
     int vx = (rand_mod(2) ? 1: -1) * rand_mod(3);
     if(vx==0)
         vx=rand_mod(2) ? 1: -1;
@@ -71,19 +88,29 @@ void setup_ball( int x, int y, int radius) {
     experiment.n_balls++;
 }
 
-void setup_peg( int x, int y, int radius) {
+void setup_peg(int x, int y, int radius) {
+    /*
+        Initializes peg with center in x and y
+    */
+
     Peg peg = {x, y, radius};
     experiment.pegs[experiment.n_pegs] = peg;
     experiment.n_pegs++;    
 }
 
 void setup_experiment() {
+    /*
+        Starts the experiment. Initializes
+        every variable with zero and puts
+        the pegs in their places
+    */
+
     experiment.n_balls=0;
     experiment.n_pegs=0;
     for(int i=0; i<=N; i++)
         experiment.result[i] = 0;
 
-    // Initialize every peg
+    // Initializes every peg
     for(int row=0; row<N; row++) {
         for(int column=0; column <= row; column++) {
             setup_peg((column+START_COLUMN-(intceil(row*HORIZONTAL_SPACE, 2))) + column*HORIZONTAL_SPACE, START_ROW+row*VERTICAL_SPACE, PEG_RADIUS);
@@ -92,6 +119,11 @@ void setup_experiment() {
 }
 
 void collision_handler() {
+    /*
+        Handles collision between balls
+        and pegs. Uses brute force (check every pair of ball
+        and peg).
+    */
     for(int i=0; i<experiment.n_balls; i++) {
         Ball *ball = &experiment.balls[i];
         
@@ -145,7 +177,11 @@ void collision_handler() {
 }
 
 void update_balls() {
-    // Update every ball currently in the experiment
+    /*
+        Updates the velocity and position of
+        every ball currently in the experiment.
+        Checks for collision after updating the ball.
+    */
     for(int i=0; i<experiment.n_balls; i++) {
         Ball *ball = &experiment.balls[i];
         
@@ -169,25 +205,10 @@ void update_balls() {
     }
 }
 
-void driver_i2c_init() {
-    i2c_init(I2C_PORT, 400*1000);
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA);
-    gpio_pull_up(I2C_SCL);
-}
-
-void display_init(ssd1306_t *disp) {
-    driver_i2c_init();
-
-    disp->external_vcc=false;
-    ssd1306_init(disp, 128, 64, 0x3C, I2C_PORT);
-    ssd1306_clear(disp);
-}
-
 void draw_circle(ssd1306_t *disp, int cy, int cx, int radius) {
     /*
         Draws the circle on the matrix
+        with center in cy and cx and radius = radius
     */
 
     ssd1306_draw_pixel(disp, cx, cy);
@@ -209,26 +230,39 @@ void draw_circle(ssd1306_t *disp, int cy, int cx, int radius) {
 }
 
 void update_display(ssd1306_t *disp) {
-    ssd1306_clear(disp);
+    /*
+        Draw the entire experiment on the
+        display. Balls, pegs, total number of
+        balls and histogram
+    */
 
+    ssd1306_clear(disp); // Clean the display
+
+    // Draw each ball
     for(int i=0; i<experiment.n_balls; i++) {
         draw_circle(disp, experiment.balls[i].y, experiment.balls[i].x, experiment.balls[i].radius);
     } 
     
+    // Draw each peg
     for(int i=0; i<experiment.n_pegs; i++) {
         draw_circle(disp, experiment.pegs[i].y, experiment.pegs[i].x, experiment.pegs[i].radius);
     } 
+    
+    // Show on the display
     ssd1306_show(disp);
 }
 
 int main()
 {
+    /*
+        Main loop of the experiment
+    */
     stdio_init_all();
 
     ssd1306_t disp;
     display_init(&disp);
 
-    srand(time(NULL));
+    init_rand();
     setup_experiment();
 
     while (true) {
