@@ -48,7 +48,7 @@ typedef struct Experiment {
 } Experiment;
 
 // --- Global constants ---
-const double GRAVITY = 1.2;      // Gravity in pixels / second^2
+const double GRAVITY = 1.75;      // Gravity in pixels / second^2
 const int HORIZONTAL_SPACE = 20; // Horizontal spacing between every peg
 const int VERTICAL_SPACE = 7;    // Vertical spacing between every peg
 const int START_COLUMN=W/2 - 1;  // Horizontal starting position of the ball/peg
@@ -78,11 +78,9 @@ void setup_ball(int x, int y, int radius) {
         Random x velocity
     */
 
-    int vx = (rand_mod(2) ? 1: -1) * rand_mod(3);
-    if(vx==0)
-        vx=rand_mod(2) ? 1: -1;
+    int vx = (rand_mod(2) ? 1: -1) * 0.4;
 
-    int x_offset = rand_mod(2) ? 1 : -1;
+    int x_offset = rand_mod(2);
     Ball ball = {x + x_offset, y, radius, vx, 0};
     experiment.balls[experiment.n_balls] = ball;
     experiment.n_balls++;
@@ -137,15 +135,17 @@ void collision_handler() {
             int distance = dx*dx + dy*dy;
             int r_sum = ball->radius + peg->radius;
             
-
             double normal_x = dx / sqrt(distance);
             double normal_y = dy / sqrt(distance);
 
             if(distance <= r_sum*r_sum) {
                 double dot = -2*((normal_x * ball->vx) + (normal_y * ball->vy));
                 if(dot > 0) {
-                    ball->vx = ball->vx + (normal_x * dot);
-                    ball->vy = ball->vy + (normal_y * dot) * 0.5;
+                    ball->x = peg->x + (normal_x * (distance+1));
+                    ball->y = peg->y + (normal_y * (distance+1));
+
+                    ball->vx = ball->vx + (normal_x * dot) * 0.4;
+                    ball->vy = ball->vy + (normal_y * dot) * 0.6;
                 }
             }
         }
@@ -191,14 +191,17 @@ void update_balls() {
         // Update positions of the balls
         ball->y += ball->vy*DT;
 
-        double new_x = ceil(ball->vx*DT); 
-        if(new_x < 0)
-            new_x = floor(ball->vx*DT);
-        else if(new_x > 0)
-            new_x = ceil(ball->vx*DT);
+        double new_x = ball->vx*DT; 
+        int r = rand_mod(2);
+        if(r)
+            new_x = ceil(new_x);
         else
-            new_x = rand_mod(2) ? 1 : -1;
-
+            new_x = floor(new_x);
+        
+        if(new_x==0) {
+            new_x = rand_mod(2) ? 1: -1;
+            ball->vx = new_x * 0.4; 
+        }
 
         ball->x += new_x;
         collision_handler(experiment);
@@ -248,6 +251,38 @@ void update_display(ssd1306_t *disp) {
         draw_circle(disp, experiment.pegs[i].y, experiment.pegs[i].x, experiment.pegs[i].radius);
     } 
     
+    char balls_number[6];
+    sprintf(balls_number, "%d", BALLS);
+
+    ssd1306_draw_string(disp, 10, 0, 1, balls_number);
+
+    int max_value = -1;
+    for(int i = 0; i < N+1; i++)
+        if(experiment.result[i] > max_value) max_value = experiment.result[i];
+
+    int display_result[N+1];
+    for(int i = 0; i < N+1; i++) display_result[i] = experiment.result[i];
+
+    if(max_value > 18)
+    {
+        double scale_factor = 18.0/max_value;
+        for(int i = 0; i < N+1; i++)
+        {
+            display_result[i] = (int) (experiment.result[i] * scale_factor);
+        }
+    }
+
+    for(int i=0; i<N+1; i++)
+    {
+        for(int j = 2+(21*i); j <= 21+(21*i); j++)
+        {
+            for(int k = 64; k > 63 - display_result[i]; k--)
+            {
+                ssd1306_draw_pixel(disp, j, k);
+            }
+        }
+    } 
+
     // Show on the display
     ssd1306_show(disp);
 }
