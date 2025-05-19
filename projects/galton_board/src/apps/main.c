@@ -19,7 +19,8 @@ typedef struct Ball {
         Ball struct with
         coordinates, radius and velocity
     */
-    int x, y, radius;
+    double x, y; 
+    int radius;
     double vx, vy;
 } Ball;
 
@@ -28,7 +29,7 @@ typedef struct Peg {
         Peg struct with
         coordinates and radius
     */
-    int x, y, radius;
+    int x, y, radius; 
 } Peg;
 
 typedef struct Experiment {
@@ -48,14 +49,14 @@ typedef struct Experiment {
 } Experiment;
 
 // --- Global constants ---
-const double GRAVITY = 1.75;      // Gravity in pixels / second^2
+const double GRAVITY = 1.25;      // Gravity in pixels / second^2
 const int HORIZONTAL_SPACE = 20; // Horizontal spacing between every peg
-const int VERTICAL_SPACE = 7;    // Vertical spacing between every peg
+const int VERTICAL_SPACE = 9;    // Vertical spacing between every peg
 const int START_COLUMN=W/2 - 1;  // Horizontal starting position of the ball/peg
 const int START_ROW=10;          // Vertical starting position of the ball/peg
 const double DT = 0.35;          // Time passed since last clock
 const int BALL_RADIUS=1;         // Radius of the ball
-const int PEG_RADIUS=2;          // Radius of the pegs
+const int PEG_RADIUS=3;          // Radius of the pegs
 const int STOP_BALLS = 10000;    // Experiment will stop
 
 // --- Global variables ---
@@ -67,7 +68,7 @@ void setup_ball(int x, int y, int radius);
 void setup_peg(int x, int y, int radius);
 void setup_experiment();
 void collision_handler();
-void update_balls();
+void collision_handler();
 void draw_circle(ssd1306_t *disp, int cy, int cx, int radius);
 void update_display(ssd1306_t *disp);
 
@@ -75,13 +76,8 @@ void setup_ball(int x, int y, int radius) {
     /*
         Initializes ball with center in x and y
         and r = radius
-        Random x velocity
     */
-
-    int vx = (rand_mod(2) ? 1: -1) * 0.4;
-
-    int x_offset = rand_mod(2);
-    Ball ball = {x + x_offset, y, radius, vx, 0};
+    Ball ball = {x, y, radius, 0, 0};
     experiment.balls[experiment.n_balls] = ball;
     experiment.n_balls++;
 }
@@ -141,14 +137,26 @@ void collision_handler() {
             if(distance <= r_sum*r_sum) {
                 double dot = -2*((normal_x * ball->vx) + (normal_y * ball->vy));
                 if(dot > 0) {
-                    ball->x = peg->x + (normal_x * (distance+1));
-                    ball->y = peg->y + (normal_y * (distance+1));
+                    ball->x = peg->x + (normal_x * (distance));
+                    ball->y = peg->y + (normal_y * (distance));
 
-                    ball->vx = ball->vx + (normal_x * dot) * 0.4;
-                    ball->vy = ball->vy + (normal_y * dot) * 0.6;
+                    ball->vx += (normal_x * dot);
+                    if(!ball->vx)
+                        ball->vx = (rand_mod(2) ? 1 : -1) * 0.6;
+                    
+                    int res = rand_mod(4) * 0.35;
+                    ball->vx *= res ? res : 1.0;
+                    ball->vy += (normal_y * dot) * 0.6;
                 }
             }
         }
+
+        // Gravity
+        ball->vy += GRAVITY*DT;
+        
+        // Update positions of the balls
+        ball->y += ball->vy*DT; 
+        ball->x += ball->vx*DT;
 
         // Check if the ball has collided with the walls
         if(ball->x >= W-1 || ball->x <= 0) {
@@ -173,38 +181,6 @@ void collision_handler() {
             experiment.result[local]++;
             BALLS++;
         }
-    }
-}
-
-void update_balls() {
-    /*
-        Updates the velocity and position of
-        every ball currently in the experiment.
-        Checks for collision after updating the ball.
-    */
-    for(int i=0; i<experiment.n_balls; i++) {
-        Ball *ball = &experiment.balls[i];
-        
-        // Update velocity of the balls
-        ball->vy += GRAVITY*DT;
-        
-        // Update positions of the balls
-        ball->y += ball->vy*DT;
-
-        double new_x = ball->vx*DT; 
-        int r = rand_mod(2);
-        if(r)
-            new_x = ceil(new_x);
-        else
-            new_x = floor(new_x);
-        
-        if(new_x==0) {
-            new_x = rand_mod(2) ? 1: -1;
-            ball->vx = new_x * 0.4; 
-        }
-
-        ball->x += new_x;
-        collision_handler(experiment);
     }
 }
 
@@ -305,6 +281,6 @@ int main()
         if(experiment.n_balls < MAX_BALLS)
             setup_ball(START_COLUMN, 1, BALL_RADIUS);
 
-        update_balls();
+        collision_handler();
     }
 }
