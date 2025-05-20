@@ -8,8 +8,8 @@
  * Objetivo: conseguir o ssid e senha do usuário
  */
 void get_ssid_and_password(char *ssid, char *password) {
-    ssid = "AP-ACCESS BLH";
-    password = "Fin@ApointBlH";
+    strcpy(ssid, "REDEDOMARCOS");
+    strcpy(password, "45612300");
 }
 
 /**

@@ -1,6 +1,7 @@
 #include "lwip/apps/mqtt.h"       // Biblioteca MQTT do lwIP
 #include "mqtt_comm.h"    // Header file com as declarações locais
 #include "lwipopts.h"             // Configurações customizadas do lwIP
+#include <string.h>
 
 /* Callback de conexão MQTT - chamado quando o status da conexão muda
  * Parâmetros:
@@ -10,7 +11,11 @@
 static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status) {
     if (status == MQTT_CONNECT_ACCEPTED) {
         printf("Conectado ao broker MQTT com sucesso!\n");
-    } else {
+    }
+    else if(status == MQTT_CONNECT_DISCONNECTED) {
+        printf("MQTT se desconectou\n");
+    }
+    else {
         printf("Falha ao conectar ao broker, código: %d\n", status);
     }
 }
