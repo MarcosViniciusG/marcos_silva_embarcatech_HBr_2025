@@ -1,0 +1,1 @@
+void xor_encrypt(const uint8_t *input, uint8_t *output, size_t len, uint8_t key);

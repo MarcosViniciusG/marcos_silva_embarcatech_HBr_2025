@@ -2,23 +2,43 @@
 #include "mqtt_comm.h"
 #include <stdio.h>
 #include <string.h>
+#include "cryptography.h"
+
+const char CLIENT_ID[] = "bitdog1";
 
 int main()
 {
     stdio_init_all();
-    sleep_ms(3000);
-    printf("Comecado\n");
     char ssid[256];
     char password[256];
     get_ssid_and_password(ssid, password);
     connect_to_wifi(ssid, password);
-    char client_id[] = "client";
     char broker_ip[] = "192.168.18.7";
-    mqtt_setup(client_id, broker_ip, NULL, NULL);
-    sleep_ms(3000);
+
+    bool authentication = false;
+    if(authentication) {    
+        mqtt_setup(CLIENT_ID, broker_ip, "aluno", "senha123");
+    }
+    else mqtt_setup(CLIENT_ID, broker_ip, NULL, NULL);
+
+    char *msg = "26.5"; 
+
     while(true) {
-        mqtt_comm_publish("escola/sala1/temperatura", "26.5", strlen("26.5"));
-        sleep_ms(1000);
+         sleep_ms(5000);
+
+        // Timestamp
+        char buffer[256];
+        sprintf(buffer, "{\"valor\":26.5,\"ts\":%lu}", time(NULL));
+
+        // Cryptography
+        uint8_t criptografada[256];
+        xor_encrypt((uint8_t *)buffer, criptografada, strlen(buffer), 42);
+
+        // Without cryptography
+        mqtt_comm_publish("escola/sala1/temperatura", buffer, strlen(buffer));
+
+        // With cryptography
+        mqtt_comm_publish("escola/sala1/temperatura", criptografada, strlen(criptografada));
     }
     return 0;
 }
