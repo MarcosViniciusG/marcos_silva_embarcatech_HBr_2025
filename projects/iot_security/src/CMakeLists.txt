@@ -37,7 +37,7 @@ pico_sdk_init()
 
 add_executable(main 
     apps/main.c
-    apps/cryptography.c
+    include/cryptography.c
     include/wifi_conn.c
     include/mqtt_comm.c
 )
