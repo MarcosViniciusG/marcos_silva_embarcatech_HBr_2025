@@ -37,7 +37,8 @@ pico_sdk_init()
 
 add_executable(main 
     main.c
-    src/ssd1306.c)
+    src/ssd1306.c
+    src/init_hardware.c)
 
 pico_set_program_name(main "main")
 pico_set_program_version(main "0.1")
@@ -60,6 +61,6 @@ target_link_libraries(main
         hardware_adc
         hardware_i2c
         hardware_irq
-        )
+        hardware_pwm)
 
 pico_add_extra_outputs(main)

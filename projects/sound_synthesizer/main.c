@@ -1,54 +1,13 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
-#include "hardware/adc.h"
 #include "hardware/irq.h"
-#include "ssd1306.h"
+#include "init_hardware.h"
 
-// Button GPIOs
-#ifndef BUTTON_A_PIN
-#define BUTTON_A_PIN 5
-#endif
-#ifndef BUTTON_B_PIN
-#define BUTTON_B_PIN 6
-#endif
-
-#ifndef RED_LED_PIN 
-#define RED_LED_PIN 13
-#endif
-#ifndef GREEN_LED_PIN
-#define GREEN_LED_PIN 11
-#endif
-
-// OLED display dimensions
-#ifndef OLED_WIDTH
-#define OLED_WIDTH 128
-#endif
-#ifndef OLED_HEIGHT
-#define OLED_HEIGHT 64
-#endif
-
-// I2C defines for the OLED display
-#ifndef I2C_PORT
-#define I2C_PORT i2c1 // Default to i2c1
-#endif
-#ifndef I2C_SDA_PIN
-#define I2C_SDA_PIN 14 // Default SDA pin for i2c1
-#endif
-#ifndef I2C_SCL_PIN
-#define I2C_SCL_PIN 15 // Default SCL pin for i2c1
-#endif
-#ifndef SSD1306_I2C_ADDR
-#define SSD1306_I2C_ADDR 0x3C // Default I2C address for SSD1306
-#endif
-
-#ifndef MIC_CHANNEL
-#define MIC_CHANNEL 2
-#endif
-
-#ifndef MIC_PIN
-#define MIC_PIN (26 + MIC_CHANNEL)
-#endif
+// --- Macros ---
+#define SAMPLE_RATE 8000                        // In samples/second
+#define SAMPLE_TIME 5                            // In seconds
+#define TOTAL_SAMPLES SAMPLE_RATE * SAMPLE_TIME
 
 typedef enum
 {
@@ -57,67 +16,46 @@ typedef enum
     STATE_PLAYING
 } state_t;
 
+// --- Global variables ---
 static state_t global_state = STATE_NOTHING;
 
-static bool _init_display(ssd1306_t *disp);
-static void _init_buttons();
-static void _init_leds();
+// --- Prototypes ---
 void gpio_callback(uint gpio, uint32_t events);
-void display_samples(ssd1306_t *disp, short *samples_buffer, uint8_t samples_num);
-void sample_mic(short *samples_buffer, uint8_t samples_num);
+void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end);
+void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp);
+void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd1306_t *disp);
+void draw_start(ssd1306_t *disp);
 
 signed main() {
     stdio_init_all();
-
-    adc_init();
-    adc_gpio_init(28);
-    adc_select_input(2);
-    _init_buttons();
-    _init_leds();
     ssd1306_t disp;
-    if(!_init_display(&disp)) {
+    if(!init_hardware(&disp)) {
         printf("Failed to init display.Exiting program\n");
         return 0;
     }
 
-    gpio_put(RED_LED_PIN, 0);
-    gpio_put(GREEN_LED_PIN, 0);
-
     gpio_set_irq_enabled_with_callback(BUTTON_A_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
     gpio_set_irq_enabled(BUTTON_B_PIN, GPIO_IRQ_EDGE_FALL, true);
 
-    short samples_buffer[128];
+    uint8_t buffer[TOTAL_SAMPLES];
+    uint32_t current_idx = 0;
+
     while (1) {
         if(global_state==STATE_RECORDING) {
-            sample_mic(samples_buffer, 128);
-            display_samples(&disp, samples_buffer, 128);
-            sleep_ms(10);
+            record_audio(buffer, TOTAL_SAMPLES, &current_idx, SAMPLE_RATE, &disp);
+            global_state = STATE_NOTHING;
         }
         else if(global_state==STATE_PLAYING) {
-
+            play_audio(buffer, current_idx, SAMPLE_RATE, &disp);
+            global_state = STATE_NOTHING;
+        }
+        else {
+            draw_start(&disp);
+            gpio_put(RED_LED_PIN, 0);
+            gpio_put(GREEN_LED_PIN, 0);
         }
         sleep_ms(10);
     }
-}
-
-static bool _init_display(ssd1306_t *disp) {
-    i2c_init(I2C_PORT, 400 * 1000); // 400 kHz for I2C communication
-    gpio_set_function(I2C_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA_PIN);
-    gpio_pull_up(I2C_SCL_PIN);
-
-    disp->external_vcc = false; // Internal VCC
-    bool success = ssd1306_init(disp, OLED_WIDTH, OLED_HEIGHT, SSD1306_I2C_ADDR, I2C_PORT);
-    
-    return success;
-}
-
-static void _init_leds() {
-    gpio_init(RED_LED_PIN);
-    gpio_init(GREEN_LED_PIN);
-    gpio_set_dir(RED_LED_PIN, GPIO_OUT);
-    gpio_set_dir(GREEN_LED_PIN, GPIO_OUT);
 }
 
 void gpio_callback(uint gpio, uint32_t events) {
@@ -132,34 +70,72 @@ void gpio_callback(uint gpio, uint32_t events) {
     }
 }
 
-static void _init_buttons() {
-    gpio_init(BUTTON_A_PIN);
-    gpio_set_dir(BUTTON_A_PIN, GPIO_IN);
-    gpio_pull_up(BUTTON_A_PIN);
-
-    gpio_init(BUTTON_B_PIN);
-    gpio_set_dir(BUTTON_B_PIN, GPIO_IN);
-    gpio_pull_up(BUTTON_B_PIN);
-}
-
-void display_samples(ssd1306_t *disp, short *samples_buffer, uint8_t samples_num) {
+void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end) {
     ssd1306_clear(disp);
-    for(uint8_t x=0; x<samples_num; x++) {
-        short h = 32 - (samples_buffer[x] / 66);
+    for(uint8_t x=start; x<end; x++) {
+        short h = 32 - (buffer[x] / 66);
         if(h >= 32)
-            ssd1306_draw_line(disp, x, 32, x, h);  
+            ssd1306_draw_line(disp, x-start, 32, x-start, h);  
         else
-             ssd1306_draw_line(disp, x, h, x, 32);  
+             ssd1306_draw_line(disp, x-start, h, x-start, 32);  
 
     }
 
     ssd1306_show(disp);
 }
 
-void sample_mic(short *samples_buffer, uint8_t samples_num) {
-    for(uint8_t i=0; i<samples_num; i++) {
-        uint16_t res = adc_read(); 
-        printf("%d\n", res);
-        samples_buffer[i] = res - 2048;
+void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp) {
+    uint32_t delay_us = 1000000 / sample_rate;
+
+    *current_idx = 0;
+
+    uint64_t start_time_us = time_us_64();
+
+    while (*current_idx < max_size) {
+        uint16_t raw_adc = adc_read();
+        int32_t processed_adc = raw_adc - 2048;
+        processed_adc = processed_adc / 16;
+        processed_adc += 128;
+
+        if (processed_adc < 0) processed_adc = 0;
+        if (processed_adc > 255) processed_adc = 255;
+
+        buffer[*current_idx] = (uint8_t)processed_adc;
+        (*current_idx)++;
+
+        uint64_t elapsed_us = time_us_64() - start_time_us;
+        uint64_t target_time_us = (*current_idx) * delay_us;
+        if (elapsed_us < target_time_us) {
+            sleep_us(target_time_us - elapsed_us);
+        }
     }
+}
+
+void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd1306_t *disp) {
+    uint slice_num = pwm_gpio_to_slice_num(BUZZER_PIN);
+    uint channel_num = pwm_gpio_to_channel(BUZZER_PIN);
+
+    uint32_t delay_us = 1000000 / sample_rate;
+
+    uint64_t start_time_us = time_us_64();
+    for (uint32_t i = 0; i < num_samples; ++i) {
+        pwm_set_chan_level(slice_num, channel_num, buffer[i]);
+
+        uint64_t elapsed_us = time_us_64() - start_time_us;
+        uint64_t target_time_us = (i + 1) * delay_us;
+        if (elapsed_us < target_time_us) {
+            sleep_us(target_time_us - elapsed_us);
+        }
+
+        int limit = (i >= OLED_WIDTH) ? i - OLED_WIDTH : 0;
+        display_waveform(disp, buffer, limit, i);
+    }
+    pwm_set_chan_level(slice_num, channel_num, 0);
+}
+
+void draw_start(ssd1306_t *disp) {
+    ssd1306_clear(disp);
+    ssd1306_draw_string(disp, 20, 28, 1, "(A) Gravar");
+    ssd1306_draw_string(disp, 20, 38, 1, "(B) Reproduzir");
+    ssd1306_show(disp);
 }
