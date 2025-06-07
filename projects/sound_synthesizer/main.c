@@ -1,12 +1,10 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/gpio.h"
-#include "hardware/irq.h"
 #include "init_hardware.h"
 
 // --- Macros ---
-#define SAMPLE_RATE 8000                        // In samples/second
-#define SAMPLE_TIME 5                            // In seconds
+#define SAMPLE_RATE 8000    // In samples/second
+#define SAMPLE_TIME 5       // In seconds
 #define TOTAL_SAMPLES SAMPLE_RATE * SAMPLE_TIME
 
 typedef enum
@@ -20,7 +18,6 @@ typedef enum
 static state_t global_state = STATE_NOTHING;
 
 // --- Prototypes ---
-void gpio_callback(uint gpio, uint32_t events);
 void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end);
 void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp);
 void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd1306_t *disp);
@@ -34,18 +31,20 @@ signed main() {
         return 0;
     }
 
-    gpio_set_irq_enabled_with_callback(BUTTON_A_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled(BUTTON_B_PIN, GPIO_IRQ_EDGE_FALL, true);
 
     uint8_t buffer[TOTAL_SAMPLES];
     uint32_t current_idx = 0;
 
     while (1) {
         if(global_state==STATE_RECORDING) {
+            gpio_put(RED_LED_PIN, 1);
+            gpio_put(GREEN_LED_PIN, 0);
             record_audio(buffer, TOTAL_SAMPLES, &current_idx, SAMPLE_RATE, &disp);
             global_state = STATE_NOTHING;
         }
         else if(global_state==STATE_PLAYING) {
+            gpio_put(RED_LED_PIN, 0);
+            gpio_put(GREEN_LED_PIN, 1);
             play_audio(buffer, current_idx, SAMPLE_RATE, &disp);
             global_state = STATE_NOTHING;
         }
@@ -53,39 +52,30 @@ signed main() {
             draw_start(&disp);
             gpio_put(RED_LED_PIN, 0);
             gpio_put(GREEN_LED_PIN, 0);
+            if(!gpio_get(BUTTON_A_PIN))
+                global_state = STATE_RECORDING;
+            else if(!gpio_get(BUTTON_B_PIN))
+                global_state = STATE_PLAYING;
         }
         sleep_ms(10);
     }
 }
 
-void gpio_callback(uint gpio, uint32_t events) {
-    if (gpio == BUTTON_A_PIN && global_state != STATE_RECORDING) {
-        global_state = STATE_RECORDING;
-        gpio_put(RED_LED_PIN, 1);
-        gpio_put(GREEN_LED_PIN, 0);
-    } else if (gpio == BUTTON_B_PIN && global_state != STATE_PLAYING) {
-        global_state = STATE_PLAYING;
-        gpio_put(RED_LED_PIN, 0);
-        gpio_put(GREEN_LED_PIN, 1);
-    }
-}
-
 void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end) {
     ssd1306_clear(disp);
-    for(uint8_t x=start; x<end; x++) {
-        short h = 32 - (buffer[x] / 66);
+    for(uint32_t x=start; x<=end; x++) {
+        uint8_t h = (buffer[x] / 4);
         if(h >= 32)
             ssd1306_draw_line(disp, x-start, 32, x-start, h);  
         else
-             ssd1306_draw_line(disp, x-start, h, x-start, 32);  
-
+            ssd1306_draw_line(disp, x-start, h, x-start, 32);  
     }
 
     ssd1306_show(disp);
 }
 
 void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp) {
-    uint32_t delay_us = 1000000 / sample_rate;
+    uint32_t delay_us = 1000000/ sample_rate;
 
     *current_idx = 0;
 
@@ -93,9 +83,8 @@ void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uin
 
     while (*current_idx < max_size) {
         uint16_t raw_adc = adc_read();
-        int32_t processed_adc = raw_adc - 2048;
-        processed_adc = processed_adc / 16;
-        processed_adc += 128;
+        uint16_t processed_adc = raw_adc;
+        processed_adc /= 16;
 
         if (processed_adc < 0) processed_adc = 0;
         if (processed_adc > 255) processed_adc = 255;
@@ -108,6 +97,8 @@ void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uin
         if (elapsed_us < target_time_us) {
             sleep_us(target_time_us - elapsed_us);
         }
+        if(((*current_idx) % 4096 == 0) && (*current_idx) > 0)
+            display_waveform(disp, buffer, (*current_idx)-128, (*current_idx)-1);
     }
 }
 
@@ -126,9 +117,8 @@ void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd
         if (elapsed_us < target_time_us) {
             sleep_us(target_time_us - elapsed_us);
         }
-
-        int limit = (i >= OLED_WIDTH) ? i - OLED_WIDTH : 0;
-        display_waveform(disp, buffer, limit, i);
+        if((i % 4096 == 0) && i > 0)
+            display_waveform(disp, buffer, i-128, i-1);
     }
     pwm_set_chan_level(slice_num, channel_num, 0);
 }

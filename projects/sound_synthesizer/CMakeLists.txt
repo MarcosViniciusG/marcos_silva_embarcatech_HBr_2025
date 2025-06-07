@@ -60,7 +60,6 @@ target_include_directories(main PRIVATE
 target_link_libraries(main 
         hardware_adc
         hardware_i2c
-        hardware_irq
         hardware_pwm)
 
 pico_add_extra_outputs(main)
