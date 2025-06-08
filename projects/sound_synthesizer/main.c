@@ -6,6 +6,7 @@
 #define SAMPLE_RATE 8000    // In samples/second
 #define SAMPLE_TIME 5       // In seconds
 #define TOTAL_SAMPLES SAMPLE_RATE * SAMPLE_TIME
+#define PROGRESS_BAR_Y 60   // Vertical position of the progress bar
 
 typedef enum
 {
@@ -18,10 +19,11 @@ typedef enum
 static state_t global_state = STATE_NOTHING;
 
 // --- Prototypes ---
-void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end);
 void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp);
 void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd1306_t *disp);
 void draw_start(ssd1306_t *disp);
+void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end);
+void draw_progress_bar(ssd1306_t *disp, uint32_t current, uint32_t total, char *text);
 
 signed main() {
     stdio_init_all();
@@ -61,21 +63,8 @@ signed main() {
     }
 }
 
-void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end) {
-    ssd1306_clear(disp);
-    for(uint32_t x=start; x<=end; x++) {
-        uint8_t h = (buffer[x] / 4);
-        if(h >= 32)
-            ssd1306_draw_line(disp, x-start, 32, x-start, h);  
-        else
-            ssd1306_draw_line(disp, x-start, h, x-start, 32);  
-    }
-
-    ssd1306_show(disp);
-}
-
 void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uint32_t sample_rate, ssd1306_t *disp) {
-    uint32_t delay_us = 1000000/ sample_rate;
+    uint32_t delay_us = 1000000 / sample_rate;
 
     *current_idx = 0;
 
@@ -97,8 +86,13 @@ void record_audio(uint8_t *buffer, uint32_t max_size, uint32_t *current_idx, uin
         if (elapsed_us < target_time_us) {
             sleep_us(target_time_us - elapsed_us);
         }
-        if(((*current_idx) % 4096 == 0) && (*current_idx) > 0)
+
+        if(((*current_idx) % 4096 == 0) && (*current_idx) > 0) {
+            ssd1306_clear(disp);
+            draw_progress_bar(disp, *current_idx, max_size, "Gravando: ");
             display_waveform(disp, buffer, (*current_idx)-128, (*current_idx)-1);
+            ssd1306_show(disp);
+        }
     }
 }
 
@@ -117,10 +111,24 @@ void play_audio(uint8_t *buffer, uint32_t num_samples, uint32_t sample_rate, ssd
         if (elapsed_us < target_time_us) {
             sleep_us(target_time_us - elapsed_us);
         }
-        if((i % 4096 == 0) && i > 0)
+        if((i % 4096 == 0) && i > 0) {
+            ssd1306_clear(disp);
+            draw_progress_bar(disp, i, num_samples, "Reproduzindo: ");
             display_waveform(disp, buffer, i-128, i-1);
+            ssd1306_show(disp);
+        }
     }
     pwm_set_chan_level(slice_num, channel_num, 0);
+}
+
+void display_waveform(ssd1306_t *disp, uint8_t *buffer, uint32_t start, uint32_t end) {
+    for(uint32_t x=start; x<=end; x++) {
+        uint8_t h = (buffer[x] / 4);
+        if(h >= 32)
+            ssd1306_draw_line(disp, x-start, 32, x-start, h);  
+        else
+            ssd1306_draw_line(disp, x-start, h, x-start, 32);  
+    }
 }
 
 void draw_start(ssd1306_t *disp) {
@@ -128,4 +136,10 @@ void draw_start(ssd1306_t *disp) {
     ssd1306_draw_string(disp, 20, 28, 1, "(A) Gravar");
     ssd1306_draw_string(disp, 20, 38, 1, "(B) Reproduzir");
     ssd1306_show(disp);
+}
+
+void draw_progress_bar(ssd1306_t *disp, uint32_t current, uint32_t total, char *text) {
+    ssd1306_draw_string(disp, 0, PROGRESS_BAR_Y-10, 1, text);
+    float p = (float)(current+1) / total;
+    ssd1306_draw_line(disp, 0, PROGRESS_BAR_Y, p * 128, PROGRESS_BAR_Y);        
 }
