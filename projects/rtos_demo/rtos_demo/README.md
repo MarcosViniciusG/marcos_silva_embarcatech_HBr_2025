@@ -67,6 +67,4 @@ This occurs because it happens every 100ms to check the state of the buttons, a 
 
 > What are the risks of using polling without priorities?
 
-Using polling in a system without proper priority management presents two main risks:
-
 **Delays and Loss of Responsiveness:** In more complex systems, an intensive polling task could "starve" other tasks, causing the system to become slow or miss critical events.
