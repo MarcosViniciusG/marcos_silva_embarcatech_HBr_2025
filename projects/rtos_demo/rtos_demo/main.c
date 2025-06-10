@@ -1,53 +1,42 @@
 #include <stdio.h>
-#include "pico/stdlib.h"
+#include "init_hardware.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
-// --- Macros ---
-#define BUTTON_A_PIN 5
-#define BUTTON_B_PIN 6
-
-#define RED_LED_PIN 13
-#define BLUE_LED_PIN 12
-#define GREEN_LED_PIN 11
-
-#define BUZZER_PIN 21
-
+// --- Global Variables ---
 static uint8_t current_led = RED_LED_PIN;
 static TaskHandle_t blink_task_handle = NULL;
 static TaskHandle_t buzzer_task_handle = NULL;
 
-static void _init_buttons() {
-    gpio_init(BUTTON_A_PIN);
-    gpio_set_dir(BUTTON_A_PIN, GPIO_IN);
-    gpio_pull_up(BUTTON_A_PIN);
+// --- Prototypes ---
+void set_led(bool r, bool g, bool b);
+void blink_task(void *params);
+void buzzer_task(void *params); 
+void button_task(void *params); 
 
-    gpio_init(BUTTON_B_PIN);
-    gpio_set_dir(BUTTON_B_PIN, GPIO_IN);
-    gpio_pull_up(BUTTON_B_PIN);
+int main() {
+    stdio_init_all();
+    init_hardware();
+
+    xTaskCreate(blink_task, "Blink", 256, NULL, 1, &blink_task_handle);
+    xTaskCreate(buzzer_task, "Buzzer", 256, NULL, 1, &buzzer_task_handle);
+    xTaskCreate(button_task, "Button", 256, NULL, 1, NULL);
+
+    vTaskStartScheduler();
+
+    while (true) {}
+    return 0;
 }
 
-static void _init_leds() {
-    gpio_init(RED_LED_PIN);
-    gpio_init(GREEN_LED_PIN);
-    gpio_init(BLUE_LED_PIN);
-    gpio_set_dir(RED_LED_PIN, GPIO_OUT);
-    gpio_set_dir(GREEN_LED_PIN, GPIO_OUT);
-    gpio_set_dir(BLUE_LED_PIN, GPIO_OUT);
-}
-
-static void _init_audio() {
-    gpio_init(BUZZER_PIN);
-    gpio_set_dir(BUZZER_PIN, GPIO_OUT);
-}
-
-void set_led(bool r, bool g, bool b) {
+void set_led(bool r, bool g, bool b) 
+{
     gpio_put(RED_LED_PIN, r);
     gpio_put(GREEN_LED_PIN, g);
     gpio_put(BLUE_LED_PIN, b);
 }
 
-void blink_task(void *params) {
+void blink_task(void *params) 
+{
     while (1) {
         gpio_put(current_led, 1);
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -69,16 +58,18 @@ void blink_task(void *params) {
     }
 }
 
-void buzzer_task(void *params) {
+void buzzer_task(void *params) 
+{
     while (true) {
         gpio_put(BUZZER_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(50)); 
+        vTaskDelay(pdMS_TO_TICKS(50)); // Beep for 50 ms
         gpio_put(BUZZER_PIN, 0); 
         vTaskDelay(pdMS_TO_TICKS(950));
     }
 }
 
-void button_task(void *pvParameters) {
+void button_task(void *params) 
+{
     bool is_led_suspended = false;
     bool is_buzzer_suspended = false;
 
@@ -107,16 +98,4 @@ void button_task(void *pvParameters) {
         
         vTaskDelay(pdMS_TO_TICKS(100)); // Polling
     }
-}
-
-int main() {
-    stdio_init_all();
-    _init_audio();
-    _init_buttons();
-    _init_leds();
-    xTaskCreate(blink_task, "Blink", 256, NULL, 1, &blink_task_handle);
-    xTaskCreate(buzzer_task, "Buzzer", 256, NULL, 1, &buzzer_task_handle);
-    xTaskCreate(button_task, "Button", 256, NULL, 1, NULL);
-    vTaskStartScheduler();
-    while (true) {}
 }
